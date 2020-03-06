@@ -114,7 +114,7 @@ if config.CACHE_DIR and not os.path.exists(config.CACHE_DIR):
 
 def main_handler(generator):
     """Decorator wrapping all WSGI endpoints, handling errors and formatting.
-    
+
     Global parameters are
      - callback: an identifier that the result should be wrapped in
      - encoding: the encoding for interacting with the corpus (default: UTF-8)
@@ -326,7 +326,7 @@ def corpus_info(args=None):
         # Call the CQP binary
         lines = run_cqp(cmd)
 
-        # Skip CQP version 
+        # Skip CQP version
         next(lines)
 
     for corpus in corpora:
@@ -1017,7 +1017,7 @@ def query_corpus(args, corpus, cqp, cqpextra, shown, shown_structs, start, end, 
     # Skip the CQP version
     next(lines)
 
-    # Read the attributes and their relative order 
+    # Read the attributes and their relative order
     attrs = read_attributes(lines)
 
     # Read the size of the query, i.e., the number of results
@@ -2071,7 +2071,7 @@ def count_query_worker_simple(corpus, cqp, groupby, ignore_case, form, expand_pr
 @main_handler
 def loglike(args=None):
     """Run a log-likelihood comparison on two queries.
-    
+
     The required parameters are
      - set1_cqp: the first CQP query
      - set2_cqp: the second CQP query
@@ -2742,6 +2742,7 @@ def relations(args=None):
         return
 
     selects = []
+    select_lemma = []
 
     if search_type == "lemgram":
         lemgram_sql = "'%s'" % sql_escape(word)
@@ -2772,53 +2773,72 @@ def relations(args=None):
             corpus_sql = "'%s'" % sql_escape(corpus).upper()
             corpus_table = config.DBWPTABLE + "_" + corpus.upper()
 
-            selects.append((corpus.upper(),
-                            "(SELECT S1.string AS head, S1.pos AS headpos, F.rel, S2.string AS dep, S2.pos AS deppos, S2.stringextra AS depextra, F.freq, R.freq AS rel_freq, HR.freq AS head_rel_freq, DR.freq AS dep_rel_freq, " + corpus_sql + " AS corpus, F.id " +
-                            "FROM `" + corpus_table + "_strings` AS S1, `" + corpus_table + "_strings` AS S2, `" + corpus_table + "` AS F, `" + corpus_table + "_rel` AS R, `" + corpus_table + "_head_rel` AS HR, `" + corpus_table + "_dep_rel` AS DR " +
-                            "WHERE S1.string = " + word_sql + " AND F.head = S1.id AND F.wfhead = 1 AND S2.id = F.dep " +
-                            minfreqsql +
-                            "AND F.rel = R.rel AND F.head = HR.head AND F.rel = HR.rel AND F.dep = DR.dep AND F.rel = DR.rel)"
-                            ))
-            selects.append((None,
-                            "(SELECT S1.string AS head, S1.pos AS headpos, F.rel, S2.string AS dep, S2.pos AS deppos, S2.stringextra AS depextra, F.freq, R.freq AS rel_freq, HR.freq AS head_rel_freq, DR.freq AS dep_rel_freq, " + corpus_sql + " AS corpus, F.id " +
-                            "FROM `" + corpus_table + "_strings` AS S1, `" + corpus_table + "_strings` AS S2, `" + corpus_table + "` AS F, `" + corpus_table + "_rel` AS R, `" + corpus_table + "_head_rel` AS HR, `" + corpus_table + "_dep_rel` AS DR " +
-                            "WHERE S2.string = " + word_sql + " AND F.dep = S2.id AND F.wfdep = 1 AND S1.id = F.head " +
-                            minfreqsql +
-                            "AND F.rel = R.rel AND F.head = HR.head AND F.rel = HR.rel AND F.dep = DR.dep AND F.rel = DR.rel)"
-                            ))
+            select_lemma.append((corpus.upper(), "(SELECT lemma from `" + corpus_table + "_strings` where string = " + word_sql + ")"))
 
-    cursor_result = []
-    if incremental:
-        yield {"progress_corpora": list(corpora)}
-        progress_count = 0
-        for sql in selects:
-            cursor.execute(sql[1])
-            cursor_result.extend(list(cursor))
-            if sql[0]:
-                yield {"progress_%d" % progress_count: {"corpus": sql[0]}}
-                progress_count += 1
-    else:
-        sql = " UNION ALL ".join(x[1] for x in selects)
-        cursor.execute(sql)
-        cursor_result = cursor
+            lemma_string = []
+            sql = " UNION ALL ".join(x[1] for x in select_lemma)
+            cursor.execute(sql)
+            for row in cursor:
+                lemma_string.append(row)
+            select_lemma = []
 
-    rels = {}
-    counter = {}
-    freq_rel = {}
-    freq_head_rel = {}
-    freq_rel_dep = {}
 
-    for row in cursor_result:
-        head = (row["head"], row["headpos"])
-        dep = (row["dep"], row["deppos"], row["depextra"])
-        rels.setdefault((head, row["rel"], dep), {"freq": 0, "source": set()})
-        rels[(head, row["rel"], dep)]["freq"] += row["freq"]
-        rels[(head, row["rel"], dep)]["source"].add("%s:%d" % (row["corpus"], row["id"]))
-        freq_rel.setdefault(row["rel"], {})[(row["corpus"], row["rel"])] = row["rel_freq"]
-        freq_head_rel.setdefault((head, row["rel"]), {})[(row["corpus"], row["rel"])] = row["head_rel_freq"]
-        freq_rel_dep.setdefault((row["rel"], dep), {})[(row["corpus"], row["rel"])] = row["dep_rel_freq"]
+        for item in lemma_string:
+            lemma = item["lemma"]
+            for corpus in corpora:
+                corpus_sql = "'%s'" % sql_escape(corpus).upper()
+                corpus_table = config.DBWPTABLE + "_" + corpus.upper()
 
-    cursor.close()
+                selects.append((corpus.upper(),
+                                "(SELECT S1.lemma AS head, S1.pos AS headpos, F.rel, S2.string AS dep, S2.pos AS deppos, S2.stringextra AS depextra, F.freq, R.freq AS rel_freq, HR.freq AS head_rel_freq, DR.freq AS dep_rel_freq, " + corpus_sql + " AS corpus, F.id " +
+                                "FROM `" + corpus_table + "_strings` AS S1, `" + corpus_table + "_strings` AS S2, `" + corpus_table + "` AS F, `" + corpus_table + "_rel` AS R, `" + corpus_table + "_head_rel` AS HR, `" + corpus_table + "_dep_rel` AS DR " +
+                                "WHERE S1.lemma = '" + lemma + "' AND F.head = S1.id AND F.wfhead = 1 AND S2.id = F.dep " +
+                                minfreqsql +
+                                "AND F.rel = R.rel AND F.head = HR.head AND F.rel = HR.rel AND F.dep = DR.dep AND F.rel = DR.rel)"
+                                ))
+                selects.append((None,
+                                "(SELECT S1.lemma AS head, S1.pos AS headpos, F.rel, S2.lemma AS dep, S2.pos AS deppos, S2.stringextra AS depextra, F.freq, R.freq AS rel_freq, HR.freq AS head_rel_freq, DR.freq AS dep_rel_freq, " + corpus_sql + " AS corpus, F.id " +
+                                "FROM `" + corpus_table + "_strings` AS S1, `" + corpus_table + "_strings` AS S2, `" + corpus_table + "` AS F, `" + corpus_table + "_rel` AS R, `" + corpus_table + "_head_rel` AS HR, `" + corpus_table + "_dep_rel` AS DR " +
+                                "WHERE S2.lemma = '" + lemma + "' AND F.dep = S2.id AND F.wfdep = 1 AND S1.id = F.head " +
+                                minfreqsql +
+                                "AND F.rel = R.rel AND F.head = HR.head AND F.rel = HR.rel AND F.dep = DR.dep AND F.rel = DR.rel)"
+                                ))
+
+        cursor_result = []
+        if incremental:
+            yield {"progress_corpora": list(corpora)}
+            progress_count = 0
+            for sql in selects:
+                cursor.execute(sql[1])
+                cursor_result.extend(list(cursor))
+                if sql[0]:
+                    print('yield')
+                    yield {"progress_%d" % progress_count: {"corpus": sql[0]}}
+                    progress_count += 1
+
+        else:
+            sql = " UNION ALL ".join(x[1] for x in selects)
+            cursor.execute(sql)
+            cursor_result = cursor
+
+
+        rels = {}
+        counter = {}
+        freq_rel = {}
+        freq_head_rel = {}
+        freq_rel_dep = {}
+
+        for row in cursor_result:
+            head = (row["head"], row["headpos"])
+            dep = (row["dep"], row["deppos"], row["depextra"])
+            rels.setdefault((head, row["rel"], dep), {"freq": 0, "source": set()})
+            rels[(head, row["rel"], dep)]["freq"] += row["freq"]
+            rels[(head, row["rel"], dep)]["source"].add("%s:%d" % (row["corpus"], row["id"]))
+            freq_rel.setdefault(row["rel"], {})[(row["corpus"], row["rel"])] = row["rel_freq"]
+            freq_head_rel.setdefault((head, row["rel"]), {})[(row["corpus"], row["rel"])] = row["head_rel_freq"]
+            freq_rel_dep.setdefault((row["rel"], dep), {})[(row["corpus"], row["rel"])] = row["dep_rel_freq"]
+
+        cursor.close()
 
     # Calculate MI
     for rel in rels:
@@ -2849,7 +2869,9 @@ def relations(args=None):
              "depextra": rel[0][2][2],
              "freq": rel[1]["freq"],
              "mi": rel[1]["mi"],
-             "source": list(rel[1]["source"])
+             "source": list(rel[1]["source"]),
+             "search_string": word,
+             "lemma_string": lemma_string
              }
         result.setdefault("relations", []).append(r)
 
