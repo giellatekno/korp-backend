@@ -1,7 +1,7 @@
 # Korp Backend
 
-This is the backend for [Korp](https://spraakbanken.gu.se/korp), a corpus search tool developed by
-[Språkbanken](https://spraakbanken.gu.se) at the University of Gothenburg, Sweden.
+This is [Giellatekno](https://giellatekno.uit.no/)'s fork of the backend for [Korp](https://spraakbanken.gu.se/korp), a corpus search tool developed by
+[Språkbanken](https://spraakbanken.gu.se) at the University of Gothenburg, Sweden. **It is only used for our old Korp instances!** For the new instances, we use Språkbanken's current version with locally applied patches.
 
 The code is distributed under the [MIT license](https://opensource.org/licenses/MIT).
 
